@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HTML → PDF Dönüştürücü</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --ink: #eef1f6;
+    --ink-dim: #9aa4b5;
+    --shell: #12151b;
+    --panel: #1a1f28;
+    --panel-2: #20262f;
+    --line: #2b323e;
+    --paper: #ffffff;
+    --paper-shadow: rgba(0,0,0,.45);
+    --accent: #3d6bff;
+    --accent-ink: #ffffff;
+    --amber: #f2a93b;
+    --danger: #ef5b5b;
+    --radius: 10px;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Space Grotesk', sans-serif;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-sizing: border-box;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --ink: #1b2130; --ink-dim: #626c7d; --shell: #eef0f4; --panel: #ffffff;
+      --panel-2: #f5f6f9; --line: #dde1e8; --paper-shadow: rgba(30,40,60,.18);
+      --accent: #2f56e0; --amber: #b5790e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef1f6; --ink-dim: #9aa4b5; --shell: #12151b; --panel: #1a1f28;
+    --panel-2: #20262f; --line: #2b323e; --paper-shadow: rgba(0,0,0,.45);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--shell); color: var(--ink);
+    font-family: var(--sans); -webkit-font-smoothing: antialiased;
+  }
+  header {
+    padding: 22px clamp(16px,4vw,40px) 16px;
+    padding-top: calc(22px + env(safe-area-inset-top, 0px));
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .brand h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+  .brand span { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); }
+  .brand .arrow { color: var(--accent); }
+  main {
+    display: grid; grid-template-columns: minmax(300px, 1fr) minmax(300px, 1.15fr);
+    gap: 1px; background: var(--line);
+    min-height: calc(100vh - 74px);
+  }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--shell); padding: clamp(14px,2.6vw,28px); }
+  .pane-title { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); text-transform: lowercase; margin: 0 0 12px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .tab {
+    font-family: var(--sans); font-size: 13px; font-weight: 500; color: var(--ink-dim);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 7px;
+    padding: 7px 14px; cursor: pointer;
+  }
+  .tab.active { color: var(--ink); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .drop {
+    border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 28px 16px;
+    text-align: center; cursor: pointer; background: var(--panel);
+  }
+  .drop.drag { border-color: var(--accent); background: var(--panel-2); }
+  .drop p { margin: 6px 0 0; color: var(--ink-dim); font-size: 13px; }
+  .drop strong { font-size: 15px; }
+  .filename { margin-top: 10px; font-family: var(--mono); font-size: 12px; color: var(--amber); word-break: break-all; }
+  textarea {
+    width: 100%; height: 320px; resize: vertical; background: var(--panel);
+    border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink);
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.6; padding: 14px;
+  }
+  textarea:focus, .tab:focus-visible, button:focus-visible, select:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  .opts { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .opt { display: flex; flex-direction: column; gap: 5px; }
+  .opt label { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+  select {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 7px; padding: 7px 10px; font-family: var(--sans); font-size: 13px;
+  }
+  .go {
+    margin-top: 18px; width: 100%; padding: 13px; border: none; border-radius: var(--radius);
+    background: var(--accent); color: var(--accent-ink); font-family: var(--sans);
+    font-weight: 600; font-size: 14.5px; cursor: pointer;
+  }
+  .go:disabled { opacity: .55; cursor: progress; }
+  .status { margin-top: 10px; font-family: var(--mono); font-size: 12px; color: var(--ink-dim); min-height: 16px; }
+  .status.err { color: var(--danger); }
+  .status.ok { color: #59c97a; }
+  .preview-wrap {
+    background: var(--panel-2); border-radius: var(--radius); padding: 22px; display: flex;
+    justify-content: center; overflow: auto; max-height: 70vh;
+  }
+  .sheet {
+    background: var(--paper); box-shadow: 0 12px 30px var(--paper-shadow); width: 100%;
+    max-width: 480px; aspect-ratio: 210 / 297;
+  }
+  .sheet.landscape { aspect-ratio: 297 / 210; }
+  iframe { width: 100%; height: 100%; border: 0; border-radius: 2px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><h1>HTML <span class="arrow">→</span> PDF</h1><span>tarayıcıda, sunucuya göndermeden</span></div>
+</header>
+<main>
+  <section>
+    <p class="pane-title">girdi</p>
+    <div class="tabs">
+      <button class="tab active" data-tab="upload">Dosya yükle</button>
+      <button class="tab" data-tab="paste">HTML yapıştır</button>
+    </div>
+
+    <div id="tab-upload">
+      <div class="drop" id="drop">
+        <strong>Bir .html dosyasını buraya sürükle</strong>
+        <p>ya da tıklayıp seç</p>
+        <div class="filename" id="filename"></div>
+      </div>
+      <input type="file" id="file" accept=".html,.htm,text/html" style="display:none">
+    </div>
+
+    <div id="tab-paste" style="display:none">
+      <textarea id="code" placeholder="&lt;h1&gt;Merhaba&lt;/h1&gt;
+&lt;p&gt;PDF'e dönüşecek HTML buraya...&lt;/p&gt;"></textarea>
+    </div>
+
+    <div class="opts">
+      <div class="opt"><label>Sayfa boyutu</label>
+        <select id="size"><option value="a4">A4</option><option value="letter">Letter</option><option value="legal">Legal</option></select>
+      </div>
+      <div class="opt"><label>Yön</label>
+        <select id="orient"><option value="p">Dikey</option><option value="l">Yatay</option></select>
+      </div>
+      <div class="opt"><label>Kenar boşluğu</label>
+        <select id="margin"><option value="14">Normal</option><option value="0">Yok</option><option value="26">Geniş</option></select>
+      </div>
+    </div>
+
+    <button class="go" id="go">PDF Oluştur ve İndir</button>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section>
+    <p class="pane-title">önizleme</p>
+    <div class="preview-wrap"><div class="sheet" id="sheet"><iframe id="frame" sandbox="allow-same-origin"></iframe></div></div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const frame = $('#frame'), sheet = $('#sheet'), status = $('#status'), go = $('#go');
+const codeEl = $('#code'), fileEl = $('#file'), drop = $('#drop'), fname = $('#filename');
+let currentHTML = '<div style="font-family:sans-serif;color:#888;padding:40px;text-align:center">Önizleme burada görünecek</div>';
+
+function renderPreview() {
+  const margin = $('#margin').value + 'px';
+  const wrapped = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{margin:0;padding:${margin};font-family:Georgia,serif;color:#1a1a1a;box-sizing:border-box;}
+    img{max-width:100%}</style></head><body>${currentHTML}</body></html>`;
+  frame.srcdoc = wrapped;
+}
+$('#orient').addEventListener('change', () => sheet.classList.toggle('landscape', $('#orient').value === 'l'));
+$('#margin').addEventListener('change', renderPreview);
+
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  const isUpload = t.dataset.tab === 'upload';
+  $('#tab-upload').style.display = isUpload ? 'block' : 'none';
+  $('#tab-paste').style.display = isUpload ? 'none' : 'block';
+}));
+
+codeEl.addEventListener('input', () => { currentHTML = codeEl.value || currentHTML; renderPreview(); });
+
+drop.addEventListener('click', () => fileEl.click());
+['dragover','dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault();
+  drop.classList.toggle('drag', ev === 'dragover');
+}));
+drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+fileEl.addEventListener('change', e => { const f = e.target.files[0]; if (f) loadFile(f); });
+
+function loadFile(f) {
+  fname.textContent = f.name;
+  const r = new FileReader();
+  r.onload = () => { currentHTML = r.result; renderPreview(); };
+  r.readAsText(f);
+}
+renderPreview();
+
+const SIZES = { a4: [210, 297], letter: [215.9, 279.4], legal: [215.9, 355.6] };
+
+go.addEventListener('click', async () => {
+  go.disabled = true;
+  status.className = 'status'; status.textContent = 'Sayfa çiziliyor…';
+  try {
+    const doc = frame.contentDocument;
+    const target = doc.body;
+    const canvas = await html2canvas(target, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+
+    status.textContent = 'PDF sayfalara bölünüyor…';
+    const orient = $('#orient').value;
+    const sizeKey = $('#size').value;
+    let [w, h] = SIZES[sizeKey];
+    if (orient === 'l') [w, h] = [h, w];
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: orient, unit: 'mm', format: [w, h] });
+    const imgWidthMM = w;
+    const pxPerMM = canvas.width / imgWidthMM;
+    const pageHeightPx = Math.floor(h * pxPerMM);
+
+    let y = 0, first = true;
+    while (y < canvas.height) {
+      const sliceH = Math.min(pageHeightPx, canvas.height - y);
+      const slice = document.createElement('canvas');
+      slice.width = canvas.width; slice.height = sliceH;
+      slice.getContext('2d').drawImage(canvas, 0, y, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+      const data = slice.toDataURL('image/jpeg', 0.95);
+      if (!first) pdf.addPage([w, h], orient);
+      pdf.addImage(data, 'JPEG', 0, 0, imgWidthMM, sliceH / pxPerMM);
+      first = false;
+      y += sliceH;
+    }
+
+    status.textContent = 'İndirmeye hazırlanıyor…';
+    const blob = pdf.output('blob');
+    const filename = (fname.textContent ? fname.textContent.replace(/\.html?$/i, '') : 'belge') + '.pdf';
+
+    const downloads = (window.claude && typeof window.claude.use === 'function') ? await window.claude.use('downloads') : null;
+    if (downloads) {
+      const buf = await blob.arrayBuffer();
+      await downloads.save({ filename, data: buf });
+      status.className = 'status ok'; status.textContent = '✓ ' + filename + ' indirildi';
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      status.className = 'status ok'; status.textContent = '✓ ' + filename + ' hazır';
+    }
+  } catch (err) {
+    status.className = 'status err'; status.textContent = 'Hata: ' + err.message;
+  } finally {
+    go.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
